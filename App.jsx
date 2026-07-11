@@ -376,7 +376,7 @@ export default function App() {
 
   if (!ready) {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-paper">
+      <div className="h-dvh w-full flex items-center justify-center bg-paper">
         <div className="text-ink-faint font-mono text-sm tracking-widest animate-pulse">OPENING JOURNAL…</div>
       </div>
     );
@@ -391,7 +391,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-full w-full flex justify-center bg-paper-dim">
+    <div className="h-dvh w-full flex justify-center bg-paper-dim">
       <StyleSheet />
       <div className="bujo-root relative flex flex-col w-full max-w-md h-full overflow-hidden bg-paper text-ink md:my-4 md:rounded-[2rem] md:shadow-2xl md:h-[min(900px,calc(100vh-2rem))]">
         <TopBar view={view} setView={setView} activeDate={activeDate} activeCollection={activeCollection} onBack={() => { setView("collections"); setActiveCollectionId(null); }} />
@@ -1028,7 +1028,7 @@ function DailyLog({ activeDate, setActiveDate, entries, mood, setMood, onToggleT
     () => setActiveDate(addDays(activeDate, -1))
   );
   return (
-    <div {...swipeHandlers}>
+    <div {...swipeHandlers} className="min-h-full flex flex-col">
       <div className="flex items-center justify-between py-2">
         <button onClick={() => setActiveDate(addDays(activeDate, -1))} className="p-2 active:opacity-50" style={{ minWidth: 44, minHeight: 44 }}><ChevronLeft size={20} /></button>
         <button onClick={() => setActiveDate(new Date())} className="font-mono text-xs text-ink-faint px-3 py-1.5 rounded-full border border-rule">Today</button>
@@ -1063,7 +1063,7 @@ function DailyLog({ activeDate, setActiveDate, entries, mood, setMood, onToggleT
           <Sparkles size={16} /> End of Day Reflection ({openTaskCount})
         </button>
       )}
-      <p className="text-center text-[11px] text-ink-faint font-mono mt-4 mb-2">swipe right to complete · swipe left for edit/delete · hold to reorder</p>
+      <p className="mt-auto text-center text-[11px] text-ink-faint font-mono pt-4 pb-2">swipe right to complete · swipe left for edit/delete · hold to reorder</p>
     </div>
   );
 }
@@ -1093,7 +1093,7 @@ function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, roll
   );
 
   return (
-    <div {...swipeHandlers}>
+    <div {...swipeHandlers} className="min-h-full flex flex-col">
       <div className="sticky top-0 z-10 -mx-4 px-4 bg-paper flex items-center justify-between py-2 border-b border-rule">
         <button onClick={() => setActiveMonth(addMonths(activeMonth, -1))} className="p-2" style={{ minWidth: 44, minHeight: 44 }}><ChevronLeft size={20} /></button>
         <h2 className="font-serif-display text-xl">{MONTH_NAMES[monthIdx]} {year}</h2>
