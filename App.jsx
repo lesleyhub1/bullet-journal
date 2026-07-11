@@ -171,9 +171,44 @@ const TYPE_META = {
 };
 
 // ---------------------------------------------------------------------------
+// Live viewport height — reads the actual visible height directly from the
+// browser rather than trusting a CSS unit (100vh, 100dvh, or a percentage
+// chain) to resolve correctly. CSS viewport units have known inconsistencies
+// across iOS versions specifically in standalone/home-screen PWA mode; the
+// visualViewport API is a direct JS measurement of "how tall is the visible
+// window right now," which sidesteps that ambiguity entirely and stays
+// correct across orientation changes and (as a side effect) shrinks the
+// layout to fit above the on-screen keyboard when it's open.
+// ---------------------------------------------------------------------------
+function useViewportHeight() {
+  const [height, setHeight] = useState(() =>
+    typeof window !== "undefined" ? window.visualViewport?.height || window.innerHeight : 0
+  );
+
+  useEffect(() => {
+    const update = () => setHeight(window.visualViewport?.height || window.innerHeight);
+    update();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+
+  return height;
+}
+
+// ---------------------------------------------------------------------------
 // Root App
 // ---------------------------------------------------------------------------
 export default function App() {
+  const viewportHeight = useViewportHeight();
   const [ready, setReady] = useState(false);
   const [entries, setEntries] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -376,7 +411,7 @@ export default function App() {
 
   if (!ready) {
     return (
-      <div className="h-dvh w-full flex items-center justify-center bg-paper">
+      <div className="h-dvh w-full flex items-center justify-center bg-paper" style={viewportHeight ? { height: viewportHeight } : undefined}>
         <div className="text-ink-faint font-mono text-sm tracking-widest animate-pulse">OPENING JOURNAL…</div>
       </div>
     );
@@ -391,7 +426,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-dvh w-full flex justify-center bg-paper-dim">
+    <div className="h-dvh w-full flex justify-center bg-paper-dim" style={viewportHeight ? { height: viewportHeight } : undefined}>
       <StyleSheet />
       <div className="bujo-root relative flex flex-col w-full max-w-md h-full overflow-hidden bg-paper text-ink md:my-4 md:rounded-[2rem] md:shadow-2xl md:h-[min(900px,calc(100vh-2rem))]">
         <TopBar view={view} setView={setView} activeDate={activeDate} activeCollection={activeCollection} onBack={() => { setView("collections"); setActiveCollectionId(null); }} />
