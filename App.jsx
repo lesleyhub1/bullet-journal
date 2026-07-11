@@ -102,6 +102,54 @@ function prevMonthKey(monthKey) {
 }
 
 // ---------------------------------------------------------------------------
+// Page-level swipe navigation — swipe anywhere on a Daily/Monthly Log page to
+// move to the next/previous day or month. Touches that start on an entry row
+// (marked with data-swipe-row) are ignored here entirely, so they're free to
+// drive that row's own swipe-to-complete / reveal-actions gesture instead.
+// ---------------------------------------------------------------------------
+function useSwipeNav(onNext, onPrev) {
+  const touchRef = useRef(null);
+  const modeRef = useRef("idle");
+
+  const onTouchStart = (e) => {
+    if (e.target.closest && e.target.closest("[data-swipe-row]")) {
+      touchRef.current = null;
+      return;
+    }
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY };
+    modeRef.current = "idle";
+  };
+
+  const onTouchMove = (e) => {
+    if (!touchRef.current) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchRef.current.x;
+    const dy = t.clientY - touchRef.current.y;
+    if (modeRef.current === "idle") {
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5) modeRef.current = "swipe";
+      else if (Math.abs(dy) > 12) modeRef.current = "scroll";
+    }
+    // Never preventDefault here — vertical scrolling stays completely native;
+    // we only read the gesture and act once on release.
+  };
+
+  const onTouchEnd = (e) => {
+    if (!touchRef.current) { modeRef.current = "idle"; return; }
+    if (modeRef.current === "swipe") {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchRef.current.x;
+      if (dx <= -60) { onNext(); haptic(8); }
+      else if (dx >= 60) { onPrev(); haptic(8); }
+    }
+    touchRef.current = null;
+    modeRef.current = "idle";
+  };
+
+  return { onTouchStart, onTouchMove, onTouchEnd };
+}
+
+// ---------------------------------------------------------------------------
 // Signifier glyphs
 // ---------------------------------------------------------------------------
 function Signifier({ entry, size = 18 }) {
@@ -328,7 +376,7 @@ export default function App() {
 
   if (!ready) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-paper">
+      <div className="h-full w-full flex items-center justify-center bg-paper">
         <div className="text-ink-faint font-mono text-sm tracking-widest animate-pulse">OPENING JOURNAL…</div>
       </div>
     );
@@ -343,7 +391,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-full flex justify-center bg-paper-dim">
+    <div className="h-full w-full flex justify-center bg-paper-dim">
       <StyleSheet />
       <div className="bujo-root relative flex flex-col w-full max-w-md h-full overflow-hidden bg-paper text-ink md:my-4 md:rounded-[2rem] md:shadow-2xl md:h-[min(900px,calc(100vh-2rem))]">
         <TopBar view={view} setView={setView} activeDate={activeDate} activeCollection={activeCollection} onBack={() => { setView("collections"); setActiveCollectionId(null); }} />
@@ -929,6 +977,7 @@ function EntryRow({ entry, onToggleTask, onDelete, onEdit, collections, onJumpTo
         </div>
       )}
       <div
+        data-swipe-row={compact ? undefined : "true"}
         onTouchStart={compact ? undefined : onTouchStart}
         onTouchMove={compact ? undefined : onTouchMove}
         onTouchEnd={compact ? undefined : onTouchEnd}
@@ -974,8 +1023,12 @@ const MOOD_ICONS = [Cloud, CloudRain, CloudSun, Sun, Sparkles];
 
 function DailyLog({ activeDate, setActiveDate, entries, mood, setMood, onToggleTask, onDelete, onEdit, onReorder, onOpenReflection, collections, onJumpToCollection }) {
   const openTaskCount = entries.filter((e) => e.type === "task" && e.status === "open").length;
+  const swipeHandlers = useSwipeNav(
+    () => setActiveDate(addDays(activeDate, 1)),
+    () => setActiveDate(addDays(activeDate, -1))
+  );
   return (
-    <div>
+    <div {...swipeHandlers}>
       <div className="flex items-center justify-between py-2">
         <button onClick={() => setActiveDate(addDays(activeDate, -1))} className="p-2 active:opacity-50" style={{ minWidth: 44, minHeight: 44 }}><ChevronLeft size={20} /></button>
         <button onClick={() => setActiveDate(new Date())} className="font-mono text-xs text-ink-faint px-3 py-1.5 rounded-full border border-rule">Today</button>
@@ -1034,8 +1087,13 @@ function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, roll
     return map;
   }, [dayEntries]);
 
+  const swipeHandlers = useSwipeNav(
+    () => setActiveMonth(addMonths(activeMonth, 1)),
+    () => setActiveMonth(addMonths(activeMonth, -1))
+  );
+
   return (
-    <div>
+    <div {...swipeHandlers}>
       <div className="sticky top-0 z-10 -mx-4 px-4 bg-paper flex items-center justify-between py-2 border-b border-rule">
         <button onClick={() => setActiveMonth(addMonths(activeMonth, -1))} className="p-2" style={{ minWidth: 44, minHeight: 44 }}><ChevronLeft size={20} /></button>
         <h2 className="font-serif-display text-xl">{MONTH_NAMES[monthIdx]} {year}</h2>
