@@ -1,19 +1,21 @@
 {
-  "name": "Bullet Journal",
   "short_name": "BuJo",
-  "description": "A local-first analog-inspired bullet journal for rapid logging, migration, and monthly/future planning.",
-  "start_url": "/index.html",
-  "scope": "/",
+  "name": "Bullet Journal",
+  "start_url": "/bullet-journal/index.html",
+  "scope": "/bullet-journal/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#F6F2E8",
   "theme_color": "#F6F2E8",
-  "categories": ["productivity", "lifestyle"],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
