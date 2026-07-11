@@ -1,8 +1,8 @@
 {
   "short_name": "BuJo",
   "name": "Bullet Journal",
-  "start_url": "/bullet-journal/index.html",
-  "scope": "/bullet-journal/",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#F6F2E8",
   "theme_color": "#F6F2E8",
