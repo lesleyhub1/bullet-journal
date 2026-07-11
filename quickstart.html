@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<title>Bullet Journal (Quickstart)</title>
+
+<!-- ===== iOS PWA / home-screen configuration ===== -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#F6F2E8" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="BuJo" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="format-detection" content="telephone=no" />
+
+<!-- ===== Fonts: serif display (Newsreader) + body (Inter) + mono (IBM Plex Mono) ===== -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- ===== Tailwind (CDN build — swap for a compiled build in the real production pipeline, see README) ===== -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+  html, body { height: 100%; margin: 0; background: #F6F2E8; }
+  #root { height: 100%; }
+  /* Disable iOS elastic bounce on the outer chrome; inner scroll areas opt back in via overscroll-contain */
+  body { position: fixed; inset: 0; overflow: hidden; width: 100%; overscroll-behavior: none; }
+</style>
+
+<!-- Single source of truth for React/ReactDOM/icons so both the Babel-compiled
+     App module and the bootstrap script below share one copy of React. -->
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.383.0?deps=react@18.3.1"
+  }
+}
+</script>
+</head>
+<body>
+<div id="root"></div>
+<div id="boot-error" style="display:none; padding:24px; font-family:sans-serif; color:#8B3A3A;"></div>
+
+<!-- In-browser JSX transform (Babel standalone). This keeps the app a true
+     single-file component with zero build tooling for quickstart/testing.
+     For an app-store-quality production build, run the Vite pipeline
+     described in README.md instead — it produces a smaller, precompiled
+     bundle that iOS Safari parses noticeably faster on a cold home-screen launch. -->
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+<script type="module">
+  async function boot() {
+    try {
+      const source = await fetch("./App.jsx", { cache: "no-cache" }).then((r) => r.text());
+      const { code } = Babel.transform(source, {
+        presets: [["react", { runtime: "classic" }]],
+        filename: "App.jsx",
+      });
+      const blob = new Blob([code], { type: "text/javascript" });
+      const url = URL.createObjectURL(blob);
+      const mod = await import(url);
+      URL.revokeObjectURL(url);
+
+      const React = await import("react");
+      const { createRoot } = await import("react-dom/client");
+      createRoot(document.getElementById("root")).render(React.createElement(mod.default));
+    } catch (err) {
+      console.error(err);
+      const el = document.getElementById("boot-error");
+      el.style.display = "block";
+      el.textContent = "Couldn't start the journal: " + err.message;
+    }
+  }
+  boot();
+
+  // Register service worker for offline-first behaviour on iOS home-screen launches.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
