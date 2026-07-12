@@ -3,7 +3,7 @@ import {
   Circle, Minus, Star, X, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight,
   CalendarDays, CalendarRange, BookOpen, Settings, Plus, Check, Sparkles,
   Download, Upload, Trash2, Link2, ArrowUpRight, Layers, Pencil, RotateCcw,
-  AlertTriangle, GripVertical, Sun, CloudSun, Cloud, CloudRain
+  AlertTriangle, GripVertical, Sun, CloudSun, Cloud, CloudRain, HelpCircle
 } from "lucide-react";
 
 /* ============================================================================
@@ -83,6 +83,7 @@ const toDateKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.
 const toMonthKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 const addMonths = (d, n) => { const r = new Date(d); r.setMonth(r.getMonth() + n); return r; };
+const formatShortDate = (dateKey) => new Date(dateKey + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 const WEEKDAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAY_MS = 86400000;
@@ -186,6 +187,7 @@ export default function App() {
   const [scheduleFor, setScheduleFor] = useState(null);
   const [threadPickerFor, setThreadPickerFor] = useState(null);
   const [dayPickerFor, setDayPickerFor] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [toast, setToast] = useState(null);
@@ -460,17 +462,18 @@ export default function App() {
           {view === "collection" && activeCollection && (
             <CollectionPage
               collection={activeCollection}
-              entries={entries.filter((e) => e.collectionId === activeCollection.id)}
+              entries={entries.filter((e) => e.collectionId === activeCollection.id || e.threadId === activeCollection.id)}
               onToggleTask={(e) => updateEntry(e.id, { status: e.status === "done" ? "open" : "done" })}
               onDelete={removeEntry}
               onEdit={setEditingEntry}
               onReorder={persistOrder}
               collections={collections}
+              onJumpToDay={(dk) => { setActiveDate(new Date(dk + "T00:00:00")); setView("daily"); }}
             />
           )}
 
           {view === "settings" && (
-            <SettingsPage onExport={exportBackup} onImport={importBackup} entryCount={entries.length} collectionCount={collections.length} lastExportAt={meta.lastExportAt} />
+            <SettingsPage onExport={exportBackup} onImport={importBackup} entryCount={entries.length} collectionCount={collections.length} lastExportAt={meta.lastExportAt} onOpenGuide={() => setGuideOpen(true)} />
           )}
         </main>
 
@@ -494,6 +497,8 @@ export default function App() {
             onClose={() => setReflectionOpen(false)}
           />
         )}
+
+        {guideOpen && <GuideOverlay onClose={() => setGuideOpen(false)} />}
 
         {scheduleFor && (
           <MonthPickerModal onPick={(fk) => { scheduleTask(scheduleFor, fk); setScheduleFor(null); }} onClose={() => setScheduleFor(null)} />
@@ -875,14 +880,14 @@ function SortableEntryList({ entries, onReorder, renderRow, emptyText }) {
 // Entry row — tap opens Edit Sheet · swipe right completes · swipe left reveals
 // Delete/Edit · long-press + drag reorders within its list
 // ---------------------------------------------------------------------------
-function EntryRow({ entry, onToggleTask, onDelete, onEdit, collections, onJumpToCollection, onJumpToFuture, compact, sortable }) {
+function EntryRow({ entry, onToggleTask, onDelete, onEdit, collections, onJumpToCollection, onJumpToFuture, onJumpToOrigin, currentCollectionId, showOrigin, compact, sortable }) {
   const [swipeX, setSwipeX] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const touchRef = useRef(null);
   const modeRef = useRef("idle");
   const longPressTimer = useRef(null);
 
-  const thread = entry.threadId ? collections?.find((c) => c.id === entry.threadId) : null;
+  const thread = entry.threadId && entry.threadId !== currentCollectionId ? collections?.find((c) => c.id === entry.threadId) : null;
   const fromFuture = !entry.monthKey && !!entry.futureKey;
   const isMuted = entry.status === "migrated" || entry.status === "scheduled" || entry.status === "irrelevant";
   const isDone = entry.status === "done";
@@ -1008,6 +1013,11 @@ function EntryRow({ entry, onToggleTask, onDelete, onEdit, collections, onJumpTo
           {fromFuture && (
             <button onClick={(e) => { e.stopPropagation(); onJumpToFuture && onJumpToFuture(); }} className="mt-1 flex items-center gap-1 text-[11px] font-mono text-ink-faint">
               <Layers size={11} /> Future Log <ArrowUpRight size={11} />
+            </button>
+          )}
+          {showOrigin && entry.date && (
+            <button onClick={(e) => { e.stopPropagation(); onJumpToOrigin && onJumpToOrigin(entry.date); }} className="mt-1 flex items-center gap-1 text-[11px] font-mono text-ink-faint">
+              <CalendarDays size={11} /> {formatShortDate(entry.date)} <ArrowUpRight size={11} />
             </button>
           )}
         </div>
@@ -1248,12 +1258,13 @@ function CollectionsIndex({ collections, entries, onOpen, onCreate, onDelete }) 
         <div className="space-y-2 mt-2">
           {collections.map((c) => {
             const count = entries.filter((e) => e.collectionId === c.id).length;
-            const threadCount = entries.filter((e) => e.threadId === c.id).length;
+            const threadCount = entries.filter((e) => e.threadId === c.id && e.collectionId !== c.id).length;
+            const total = count + threadCount;
             return (
               <div key={c.id} className="flex items-center gap-2 rounded-2xl bg-paper-card border border-rule px-4 py-3">
                 <button onClick={() => onOpen(c.id)} className="flex-1 min-w-0 text-left">
                   <p className="font-serif-display text-base truncate">{c.name}</p>
-                  <p className="font-mono text-[10px] text-ink-faint">{count} item{count !== 1 ? "s" : ""}{threadCount ? ` · linked from ${threadCount}` : ""}</p>
+                  <p className="font-mono text-[10px] text-ink-faint">{total} item{total !== 1 ? "s" : ""}{threadCount ? ` (${threadCount} threaded)` : ""}</p>
                 </button>
                 <button onClick={() => onDelete(c.id)} className="shrink-0 p-2 text-ink-faint" style={{ minWidth: 40, minHeight: 40 }}><Trash2 size={16} /></button>
               </div>
@@ -1265,7 +1276,7 @@ function CollectionsIndex({ collections, entries, onOpen, onCreate, onDelete }) 
   );
 }
 
-function CollectionPage({ collection, entries, onToggleTask, onDelete, onEdit, onReorder, collections }) {
+function CollectionPage({ collection, entries, onToggleTask, onDelete, onEdit, onReorder, collections, onJumpToDay }) {
   return (
     <div className="rounded-2xl bg-paper-card border border-rule px-4 pt-1 mt-2 overflow-hidden">
       <SortableEntryList
@@ -1273,7 +1284,18 @@ function CollectionPage({ collection, entries, onToggleTask, onDelete, onEdit, o
         onReorder={onReorder}
         emptyText="This page is empty. Log something below."
         renderRow={(entry, idx, sortable) => (
-          <EntryRow key={entry.id} entry={entry} onToggleTask={onToggleTask} onDelete={onDelete} onEdit={onEdit} collections={collections} sortable={sortable} />
+          <EntryRow
+            key={entry.id}
+            entry={entry}
+            onToggleTask={onToggleTask}
+            onDelete={onDelete}
+            onEdit={onEdit}
+            collections={collections}
+            sortable={sortable}
+            currentCollectionId={collection.id}
+            showOrigin={entry.collectionId !== collection.id}
+            onJumpToOrigin={onJumpToDay}
+          />
         )}
       />
     </div>
@@ -1283,10 +1305,19 @@ function CollectionPage({ collection, entries, onToggleTask, onDelete, onEdit, o
 // ---------------------------------------------------------------------------
 // Settings — backup export / import
 // ---------------------------------------------------------------------------
-function SettingsPage({ onExport, onImport, entryCount, collectionCount, lastExportAt }) {
+function SettingsPage({ onExport, onImport, entryCount, collectionCount, lastExportAt, onOpenGuide }) {
   const fileRef = useRef(null);
   return (
     <div className="space-y-4 pt-2">
+      <button onClick={onOpenGuide} className="w-full flex items-center gap-3 rounded-2xl bg-ink text-paper p-4 text-left">
+        <HelpCircle size={20} className="shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="font-medium">How to use this journal</p>
+          <p className="text-xs opacity-70">The bullet journal method, and how it maps to this app</p>
+        </div>
+        <ChevronRight size={18} className="shrink-0 opacity-70" />
+      </button>
+
       <div className="rounded-2xl bg-paper-card border border-rule p-4">
         <h3 className="font-mono text-[11px] tracking-widest text-ink-faint mb-2">JOURNAL</h3>
         <p className="text-sm">{entryCount} bullets logged across {collectionCount} collections.</p>
@@ -1304,6 +1335,135 @@ function SettingsPage({ onExport, onImport, entryCount, collectionCount, lastExp
       <div className="rounded-2xl bg-paper-card border border-rule p-4">
         <h3 className="font-mono text-[11px] tracking-widest text-ink-faint mb-2">ABOUT</h3>
         <p className="text-xs text-ink-faint leading-relaxed">A digital rendition of the analog bullet journal method. Rapid log, migrate honestly, and let go of what no longer matters.</p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Guide — the analog philosophy, and how it maps onto this app
+// ---------------------------------------------------------------------------
+function GuideSection({ label, title, children }) {
+  return (
+    <section>
+      <h3 className="font-mono text-[11px] tracking-widest text-ink-faint mb-1.5">{label}</h3>
+      {title && <h4 className="font-serif-display text-lg mb-2">{title}</h4>}
+      <div className="text-[14px] leading-relaxed text-ink space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function GuideRow({ icon, label, children }) {
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-rule-70 last:border-b-0">
+      <span className="mt-0.5 shrink-0 flex items-center justify-center" style={{ width: 22 }}>{icon}</span>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-[14px]">{label}</p>
+        <p className="text-[13px] text-ink-faint leading-snug">{children}</p>
+      </div>
+    </div>
+  );
+}
+
+function GuideOverlay({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-paper flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-rule">
+        <h2 className="font-serif-display text-xl">How this journal works</h2>
+        <button onClick={onClose} className="p-2 -mr-2" style={{ minWidth: 44, minHeight: 44 }}><X size={20} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-7">
+        <GuideSection label="THE IDEA" title="Write less. Decide more.">
+          <p>
+            The bullet journal method isn't about keeping a diary — it's a system for capturing
+            what matters in a few words, and then, on a regular cadence, being honest about
+            what's worth carrying forward. Everything gets logged the same fast way: a short
+            line with a mark in front of it showing what kind of thing it is.
+          </p>
+          <p>
+            The part that makes it work isn't the logging — it's the <em>migration</em>. On paper,
+            an unfinished task doesn't carry itself to tomorrow's page. You have to physically
+            rewrite it, and that little bit of friction forces a real question: do I still care
+            about this, or was I just avoiding deciding? This app keeps that same friction on
+            purpose — nothing moves forward automatically.
+          </p>
+        </GuideSection>
+
+        <GuideSection label="THE MARKS" title="Every bullet has a signifier">
+          <div className="rounded-xl border border-rule overflow-hidden px-3">
+            <GuideRow icon={<span className="block rounded-full bg-ink" style={{ width: 7, height: 7 }} />} label="Task — •">
+              Something to do. Tap the dot to mark it done; it becomes a checkmark.
+            </GuideRow>
+            <GuideRow icon={<Circle size={13} strokeWidth={2.2} />} label="Event — ○">
+              Something happening at a time or place. Doesn't get "completed," just logged.
+            </GuideRow>
+            <GuideRow icon={<Minus size={15} strokeWidth={2.4} />} label="Note — —">
+              A fact, idea, or thought worth keeping. No status, just a record.
+            </GuideRow>
+            <GuideRow icon={<Star size={13} fill="var(--accent-priority)" className="text-accent-priority" />} label="Priority — ★">
+              Layered on top of any of the above to flag it as urgent or important.
+            </GuideRow>
+          </div>
+        </GuideSection>
+
+        <GuideSection label="THE PAGES" title="Four views, one set of bullets">
+          <p><strong>Daily Log</strong> — today's stream, plus a 1–5 mood tracker.</p>
+          <p><strong>Monthly Log</strong> — a day-by-day list of what happened this month, and a
+          separate pool for open-ended tasks that don't belong to one specific day.</p>
+          <p><strong>Future Log</strong> — a 12-month runway for anything further out than this
+          month. Items you file here show up automatically in that month's Monthly Log once
+          you're viewing it.</p>
+          <p><strong>Collections</strong> — a dedicated page for an ongoing topic (a project, a
+          reading list, anything worth its own page instead of scattering across days).</p>
+        </GuideSection>
+
+        <GuideSection label="THE RITUAL" title="End of Day Reflection">
+          <p>
+            When today has open tasks left, a button appears to walk through them one at a time.
+            For each one, you make an honest call:
+          </p>
+          <div className="rounded-xl border border-rule overflow-hidden px-3">
+            <GuideRow icon={<Check size={14} />} label="Done">It's finished — mark it and move on.</GuideRow>
+            <GuideRow icon={<ArrowRight size={14} />} label="Migrate">Still matters, not today — push to tomorrow.</GuideRow>
+            <GuideRow icon={<ArrowLeft size={14} />} label="Schedule">Not urgent — file it under a future month instead.</GuideRow>
+            <GuideRow icon={<Minus size={14} />} label="Irrelevant">Doesn't matter anymore. Let it go, on purpose.</GuideRow>
+          </div>
+          <p className="text-ink-faint">
+            This is the actual heart of the method — not the logging, this part. It's where a
+            long list of half-finished tasks turns into an honest one.
+          </p>
+        </GuideSection>
+
+        <GuideSection label="THREADING" title="The digital version of a page number">
+          <p>
+            In a paper notebook, an index lets you write "Project X — pg. 42" so a bullet
+            anywhere in the book can point to its own dedicated page. Threading does the same
+            thing here: open any bullet's edit sheet and choose <strong>Thread to collection</strong> to
+            link it. A small tag appears under the bullet — tap it to jump straight to that
+            collection. The bullet still lives on its original day; the collection just keeps an
+            index of everything that points to it.
+          </p>
+        </GuideSection>
+
+        <GuideSection label="GESTURES" title="Quick reference">
+          <div className="rounded-xl border border-rule overflow-hidden px-3">
+            <GuideRow icon={<span className="text-[13px]">→</span>} label="Swipe a bullet right">Marks a task done instantly.</GuideRow>
+            <GuideRow icon={<span className="text-[13px]">←</span>} label="Swipe a bullet left">Reveals quick edit / delete buttons.</GuideRow>
+            <GuideRow icon={<Pencil size={14} />} label="Tap a bullet">Opens the full edit sheet.</GuideRow>
+            <GuideRow icon={<GripVertical size={14} />} label="Hold and drag">Reorders bullets within their list.</GuideRow>
+            <GuideRow icon={<span className="text-[13px]">⇄</span>} label="Swipe the page">Moves to the previous/next day or month.</GuideRow>
+          </div>
+        </GuideSection>
+
+        <GuideSection label="YOUR DATA" title="Nothing leaves your phone">
+          <p>
+            Every bullet, collection, and mood is stored locally on this device — there's no
+            account and no server. That also means nothing syncs between devices on its own.
+            Back up from Settings regularly, especially before switching phones; a backup is a
+            plain JSON file you control.
+          </p>
+        </GuideSection>
       </div>
     </div>
   );
