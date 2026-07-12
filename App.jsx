@@ -1365,6 +1365,37 @@ function GuideRow({ icon, label, children }) {
   );
 }
 
+function FlowNode({ label, sub }) {
+  return (
+    <div className="flex-1 min-w-0 text-center">
+      <p className="font-serif-display text-[13px] leading-tight">{label}</p>
+      <p className="text-[10px] text-ink-faint font-mono mt-0.5">{sub}</p>
+    </div>
+  );
+}
+
+function FlowDiagram() {
+  return (
+    <div className="rounded-xl border border-rule bg-paper p-4">
+      <div className="flex items-center justify-between gap-1">
+        <FlowNode label="Future Log" sub="months ahead" />
+        <ArrowRight size={14} className="text-ink-faint shrink-0" />
+        <FlowNode label="Monthly Log" sub="this month" />
+        <ArrowRight size={14} className="text-ink-faint shrink-0" />
+        <FlowNode label="Daily Log" sub="today" />
+      </div>
+      <div className="flex items-center justify-center gap-1.5 mt-2 pt-2 border-t border-rule-70 text-ink-faint text-[10px] font-mono">
+        <ArrowLeft size={11} /> migrate what's still open, one honest decision at a time
+      </div>
+      <div className="flex items-center justify-center gap-1.5 mt-2 pt-2 border-t border-rule-70 text-[11px]">
+        <Link2 size={11} className="text-accent-event shrink-0" />
+        <span className="text-ink-faint">any bullet, on any page, can thread to a</span>
+        <span className="font-medium text-ink">Collection</span>
+      </div>
+    </div>
+  );
+}
+
 function GuideOverlay({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-paper flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
@@ -1392,30 +1423,67 @@ function GuideOverlay({ onClose }) {
 
         <GuideSection label="THE MARKS" title="Every bullet has a signifier">
           <div className="rounded-xl border border-rule overflow-hidden px-3">
-            <GuideRow icon={<span className="block rounded-full bg-ink" style={{ width: 7, height: 7 }} />} label="Task — •">
+            <GuideRow icon={<span className="block rounded-full bg-ink" style={{ width: 7, height: 7 }} />} label="Task">
               Something to do. Tap the dot to mark it done; it becomes a checkmark.
             </GuideRow>
-            <GuideRow icon={<Circle size={13} strokeWidth={2.2} />} label="Event — ○">
+            <GuideRow icon={<Circle size={13} strokeWidth={2.2} />} label="Event">
               Something happening at a time or place. Doesn't get "completed," just logged.
             </GuideRow>
-            <GuideRow icon={<Minus size={15} strokeWidth={2.4} />} label="Note — —">
+            <GuideRow icon={<Minus size={15} strokeWidth={2.4} />} label="Note">
               A fact, idea, or thought worth keeping. No status, just a record.
             </GuideRow>
-            <GuideRow icon={<Star size={13} fill="var(--accent-priority)" className="text-accent-priority" />} label="Priority — ★">
+            <GuideRow icon={<Star size={13} fill="var(--accent-priority)" className="text-accent-priority" />} label="Priority">
               Layered on top of any of the above to flag it as urgent or important.
             </GuideRow>
           </div>
         </GuideSection>
 
-        <GuideSection label="THE PAGES" title="Four views, one set of bullets">
-          <p><strong>Daily Log</strong> — today's stream, plus a 1–5 mood tracker.</p>
-          <p><strong>Monthly Log</strong> — a day-by-day list of what happened this month, and a
-          separate pool for open-ended tasks that don't belong to one specific day.</p>
-          <p><strong>Future Log</strong> — a 12-month runway for anything further out than this
-          month. Items you file here show up automatically in that month's Monthly Log once
-          you're viewing it.</p>
-          <p><strong>Collections</strong> — a dedicated page for an ongoing topic (a project, a
-          reading list, anything worth its own page instead of scattering across days).</p>
+        <GuideSection label="THE FLOW" title="The pages feed each other">
+          <p>
+            In BuJo, you never truly start a Daily Log from scratch. Instead, your pages work
+            together in a thoughtful hand-off.
+          </p>
+          <p>
+            Anything months down the road lands safely in the Future Log first. When that month
+            finally arrives, you gracefully migrate those relevant items into your Monthly Log.
+            From there, you navigate the day-to-day by rapid-logging under the current date in
+            your Daily Log.
+          </p>
+          <p>
+            And when the day winds down? Open items don't just blindly roll over into tomorrow.
+            You pause, reflect, and intentionally decide exactly where they belong next.
+          </p>
+          <FlowDiagram />
+          <p className="text-ink-faint">
+            Every arrow above is a real decision, not automation — here's where each one lives
+            in this app:
+          </p>
+          <div className="rounded-xl border border-rule overflow-hidden px-3">
+            <GuideRow icon={<ArrowLeft size={14} />} label="Future → Monthly">
+              Automatic once the month arrives: anything filed in the Future Log for that month
+              simply appears in its Monthly Log — no extra step.
+            </GuideRow>
+            <GuideRow icon={<CalendarDays size={14} />} label="Monthly → Daily">
+              Open an open-ended monthly task and tap Move to day to give it a specific date.
+            </GuideRow>
+            <GuideRow icon={<ArrowRight size={14} />} label="Daily → tomorrow / this month / future">
+              End of Day Reflection: Migrate sends it to tomorrow, Schedule files it under a
+              future month, Irrelevant lets it go for good.
+            </GuideRow>
+            <GuideRow icon={<RotateCcw size={14} />} label="Last month → this month">
+              Open Monthly Log — if last month left anything unfinished, a Roll over button
+              offers to bring it forward in one tap.
+            </GuideRow>
+          </div>
+        </GuideSection>
+
+        <GuideSection label="COLLECTIONS" title="The one page that sits outside the timeline">
+          <p>
+            A Collection isn't a day or a month — it's a dedicated page for an ongoing topic (a
+            project, a reading list, anything worth its own space). It doesn't wait its turn in
+            the Future → Monthly → Daily flow; any bullet, on any of those pages, can thread to
+            one directly. More on that below.
+          </p>
         </GuideSection>
 
         <GuideSection label="THE RITUAL" title="End of Day Reflection">
