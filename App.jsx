@@ -3,7 +3,7 @@ import {
   Circle, Minus, Star, X, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight,
   CalendarDays, CalendarRange, BookOpen, Settings, Plus, Check, Sparkles,
   Download, Upload, Trash2, Link2, ArrowUpRight, Layers, Pencil, RotateCcw,
-  AlertTriangle, GripVertical, Sun, CloudSun, Cloud, CloudRain, HelpCircle
+  AlertTriangle, GripVertical, Sun, CloudSun, Cloud, CloudRain, HelpCircle, Flame
 } from "lucide-react";
 
 /* ============================================================================
@@ -84,6 +84,22 @@ const toMonthKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 const addMonths = (d, n) => { const r = new Date(d); r.setMonth(r.getMonth() + n); return r; };
 const formatShortDate = (dateKey) => new Date(dateKey + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+function habitStats(habitLog, habitId) {
+  const prefix = `habit-log-${habitId}-`;
+  let total = 0;
+  for (const k in habitLog) {
+    if (k.startsWith(prefix) && habitLog[k]) total++;
+  }
+  let streak = 0;
+  let cursor = new Date();
+  if (!habitLog[prefix + toDateKey(cursor)]) cursor = addDays(cursor, -1);
+  while (habitLog[prefix + toDateKey(cursor)]) {
+    streak++;
+    cursor = addDays(cursor, -1);
+  }
+  return { total, streak };
+}
 const WEEKDAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAY_MS = 86400000;
@@ -188,6 +204,7 @@ export default function App() {
   const [threadPickerFor, setThreadPickerFor] = useState(null);
   const [dayPickerFor, setDayPickerFor] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [editingViewCollectionId, setEditingViewCollectionId] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [toast, setToast] = useState(null);
@@ -249,6 +266,42 @@ export default function App() {
     await dbPut("meta", { key, value });
     setMeta((prev) => ({ ...prev, [key]: value }));
     haptic(8);
+  };
+
+  const addHabit = async (name) => {
+    if (!name.trim()) return;
+    const list = meta.habits || [];
+    const next = [...list, { id: uid(), name: name.trim(), createdAt: Date.now() }];
+    await dbPut("meta", { key: "habits", value: next });
+    setMeta((prev) => ({ ...prev, habits: next }));
+    haptic(8);
+  };
+
+  const deleteHabit = async (id) => {
+    const list = meta.habits || [];
+    const next = list.filter((h) => h.id !== id);
+    await dbPut("meta", { key: "habits", value: next });
+    const logKeys = Object.keys(meta).filter((k) => k.startsWith(`habit-log-${id}-`));
+    for (const k of logKeys) await dbDelete("meta", k);
+    setMeta((prev) => {
+      const copy = { ...prev, habits: next };
+      logKeys.forEach((k) => delete copy[k]);
+      return copy;
+    });
+    haptic(10);
+  };
+
+  const toggleHabitDay = async (habitId, dateKey) => {
+    const key = `habit-log-${habitId}-${dateKey}`;
+    const wasDone = !!meta[key];
+    if (wasDone) {
+      await dbDelete("meta", key);
+      setMeta((prev) => { const copy = { ...prev }; delete copy[key]; return copy; });
+    } else {
+      await dbPut("meta", { key, value: true });
+      setMeta((prev) => ({ ...prev, [key]: true }));
+    }
+    haptic(wasDone ? 8 : [10, 20, 10]);
   };
 
   const createCollection = async (name) => {
@@ -317,6 +370,11 @@ export default function App() {
 
   const moveEntryToDay = async (id, dateKey_) => {
     await updateEntry(id, { date: dateKey_, monthKey: dateKey_.slice(0, 7), futureKey: null });
+    haptic(10);
+  };
+
+  const removeThreadFromEntry = async (id) => {
+    await updateEntry(id, { threadId: null });
     haptic(10);
   };
 
@@ -412,7 +470,7 @@ export default function App() {
               setMood={(v) => setMood(dateKey, v)}
               onToggleTask={(e) => (e.status === "done" ? reopenTask(e.id) : completeTask(e.id))}
               onDelete={removeEntry}
-              onEdit={setEditingEntry}
+              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); }}
               onReorder={persistOrder}
               onOpenReflection={() => setReflectionOpen(true)}
               collections={collections}
@@ -434,11 +492,16 @@ export default function App() {
               onJumpToDay={(dk) => { setActiveDate(new Date(dk + "T00:00:00")); setView("daily"); }}
               onToggleTask={(e) => updateEntry(e.id, { status: e.status === "done" ? "open" : "done" })}
               onDelete={removeEntry}
-              onEdit={setEditingEntry}
+              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); }}
               onReorder={persistOrder}
               collections={collections}
               onJumpToCollection={(id) => { setActiveCollectionId(id); setView("collection"); }}
               onJumpToFuture={() => setView("future")}
+              habits={meta.habits || []}
+              habitLog={meta}
+              onAddHabit={addHabit}
+              onDeleteHabit={deleteHabit}
+              onToggleHabitDay={toggleHabitDay}
             />
           )}
 
@@ -451,7 +514,7 @@ export default function App() {
               }}
               onToggleTask={(e) => updateEntry(e.id, { status: e.status === "done" ? "open" : "done" })}
               onDelete={removeEntry}
-              onEdit={setEditingEntry}
+              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); }}
             />
           )}
 
@@ -465,7 +528,7 @@ export default function App() {
               entries={entries.filter((e) => e.collectionId === activeCollection.id || e.threadId === activeCollection.id)}
               onToggleTask={(e) => updateEntry(e.id, { status: e.status === "done" ? "open" : "done" })}
               onDelete={removeEntry}
-              onEdit={setEditingEntry}
+              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(activeCollection.id); }}
               onReorder={persistOrder}
               collections={collections}
               onJumpToDay={(dk) => { setActiveDate(new Date(dk + "T00:00:00")); setView("daily"); }}
@@ -528,16 +591,18 @@ export default function App() {
         {editingEntry && (
           <EditSheet
             entry={editingEntry}
-            onClose={() => setEditingEntry(null)}
-            onSave={(patch) => { updateEntry(editingEntry.id, patch); setEditingEntry(null); haptic(10); }}
-            onDelete={() => { removeEntry(editingEntry.id); setEditingEntry(null); }}
-            onComplete={() => { completeTask(editingEntry.id); setEditingEntry(null); }}
-            onReopen={() => { reopenTask(editingEntry.id); setEditingEntry(null); }}
-            onMigrate={() => { migrateTask(editingEntry.id); setEditingEntry(null); }}
-            onSchedule={() => { setScheduleFor(editingEntry.id); setEditingEntry(null); }}
-            onIrrelevant={() => { markIrrelevant(editingEntry.id); setEditingEntry(null); }}
-            onThread={() => { setThreadPickerFor(editingEntry.id); setEditingEntry(null); }}
-            onMoveToDay={() => { setDayPickerFor(editingEntry.id); setEditingEntry(null); }}
+            viewingCollectionId={editingViewCollectionId}
+            onClose={() => { setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onSave={(patch) => { updateEntry(editingEntry.id, patch); setEditingEntry(null); setEditingViewCollectionId(null); haptic(10); }}
+            onDelete={() => { removeEntry(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onComplete={() => { completeTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onReopen={() => { reopenTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onMigrate={() => { migrateTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onSchedule={() => { setScheduleFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onIrrelevant={() => { markIrrelevant(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onThread={() => { setThreadPickerFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onMoveToDay={() => { setDayPickerFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
+            onRemoveFromCollection={() => { removeThreadFromEntry(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); flash("Removed from collection"); }}
             simple={!!editingEntry.futureKey}
           />
         )}
@@ -591,6 +656,7 @@ function StyleSheet() {
       .bg-rule { background-color: var(--rule); }
       .bg-accent-priority { background-color: var(--accent-priority); }
       .bg-accent-event { background-color: var(--accent-event); }
+      .bg-accent-done { background-color: var(--accent-done); }
       .bg-accent-priority-10 { background-color: rgba(139,58,58,.10); }
       .bg-paper-10 { background-color: rgba(246,242,232,.10); }
 
@@ -1082,7 +1148,7 @@ function DailyLog({ activeDate, setActiveDate, entries, mood, setMood, onToggleT
 // Monthly Log — dual pane: date list + open-ended monthly tasks (now editable
 // via the shared rapid-log bar and rollover from last month)
 // ---------------------------------------------------------------------------
-function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, rolloverCandidates, onRollover, onJumpToDay, onToggleTask, onDelete, onEdit, onReorder, collections, onJumpToCollection, onJumpToFuture }) {
+function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, rolloverCandidates, onRollover, onJumpToDay, onToggleTask, onDelete, onEdit, onReorder, collections, onJumpToCollection, onJumpToFuture, habits, habitLog, onAddHabit, onDeleteHabit, onToggleHabitDay }) {
   const year = activeMonth.getFullYear();
   const monthIdx = activeMonth.getMonth();
   const total = daysInMonth(year, monthIdx);
@@ -1140,6 +1206,15 @@ function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, roll
         </div>
       </section>
 
+      <HabitTracker
+        activeMonth={activeMonth}
+        habits={habits}
+        habitLog={habitLog}
+        onAddHabit={onAddHabit}
+        onDeleteHabit={onDeleteHabit}
+        onToggleHabitDay={onToggleHabitDay}
+      />
+
       <section className="rounded-2xl bg-paper-card border border-rule px-4 pt-1 overflow-hidden">
         <h3 className="font-mono text-[11px] tracking-widest text-ink-faint pt-3 pb-2">MONTHLY TASKS</h3>
 
@@ -1159,6 +1234,130 @@ function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, roll
         />
       </section>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Habit Tracker — the classic analog BuJo grid: habits down the side, days of
+// the month across the top, tap a cell to mark it done. Habits themselves are
+// evergreen (the same list follows you into next month); only the marks are
+// specific to a given day.
+// ---------------------------------------------------------------------------
+const HABIT_CELL = 30;
+const HABIT_NAME_COL = 144;
+
+function HabitTracker({ activeMonth, habits, habitLog, onAddHabit, onDeleteHabit, onToggleHabitDay }) {
+  const [name, setName] = useState("");
+  const [managing, setManaging] = useState(false);
+  const scrollRef = useRef(null);
+  const year = activeMonth.getFullYear();
+  const monthIdx = activeMonth.getMonth();
+  const total = daysInMonth(year, monthIdx);
+  const days = Array.from({ length: total }, (_, i) => i + 1);
+  const todayKey = toDateKey(new Date());
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const now = new Date();
+    if (now.getFullYear() === year && now.getMonth() === monthIdx) {
+      scrollRef.current.scrollLeft = Math.max(0, (now.getDate() - 1 - 3) * HABIT_CELL);
+    } else {
+      scrollRef.current.scrollLeft = 0;
+    }
+  }, [year, monthIdx]);
+
+  const submit = () => {
+    if (!name.trim()) return;
+    onAddHabit(name);
+    setName("");
+  };
+
+  return (
+    <section className="rounded-2xl bg-paper-card border border-rule mb-4 overflow-hidden">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <h3 className="font-mono text-[11px] tracking-widest text-ink-faint">HABITS</h3>
+        {habits.length > 0 && (
+          <button onClick={() => setManaging((m) => !m)} className="text-[11px] font-mono text-accent-event">{managing ? "Done" : "Edit"}</button>
+        )}
+      </div>
+
+      {habits.length === 0 ? (
+        <p className="px-4 pb-3 text-sm text-ink-faint">No habits yet — add one below to start tracking it day by day.</p>
+      ) : (
+        <div ref={scrollRef} className="overflow-x-auto pr-4 pb-1" style={{ scrollSnapType: "x proximity" }}>
+          <div style={{ minWidth: HABIT_NAME_COL + total * HABIT_CELL }}>
+            <div className="flex">
+              <div style={{ width: HABIT_NAME_COL }} className="shrink-0 sticky left-0 z-10 bg-paper-card pl-4" />
+              {days.map((d) => {
+                const dk = toDateKey(new Date(year, monthIdx, d));
+                const isToday = dk === todayKey;
+                return (
+                  <div key={d} style={{ width: HABIT_CELL, scrollSnapAlign: "start" }} className={`shrink-0 text-center text-[9px] font-mono pb-1 ${isToday ? "text-accent-event font-bold" : "text-ink-faint"}`}>
+                    {d}
+                  </div>
+                );
+              })}
+            </div>
+            {habits.map((h) => {
+              const { streak, total: totalDone } = habitStats(habitLog, h.id);
+              return (
+                <div key={h.id} className="flex items-start border-t border-rule-70">
+                  <div style={{ width: HABIT_NAME_COL }} className="shrink-0 sticky left-0 z-10 bg-paper-card pl-4 pr-1 py-1.5 flex items-start gap-1 min-w-0" >
+                    <span className="text-[12px] leading-tight break-words min-w-0 flex-1" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{h.name}</span>
+                    {managing ? (
+                      <div className="shrink-0 flex flex-col items-end gap-1 pt-0.5">
+                        {totalDone > 0 && <span className="text-[9px] font-mono text-ink-faint whitespace-nowrap">{totalDone}×</span>}
+                        <button onClick={() => onDeleteHabit(h.id)} className="text-accent-priority" style={{ minWidth: 22, minHeight: 22 }}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      streak > 0 && (
+                        <span className="shrink-0 flex items-center gap-0.5 text-[10px] font-mono text-accent-priority pt-0.5" title={`${streak}-day streak`}>
+                          <Flame size={11} /> {streak}
+                        </span>
+                      )
+                    )}
+                  </div>
+                  {days.map((d) => {
+                    const dk = toDateKey(new Date(year, monthIdx, d));
+                    const done = !!habitLog[`habit-log-${h.id}-${dk}`];
+                    const isToday = dk === todayKey;
+                    return (
+                      <button
+                        key={d}
+                        onClick={() => onToggleHabitDay(h.id, dk)}
+                        style={{ width: HABIT_CELL, height: HABIT_CELL }}
+                        className={`shrink-0 flex items-center justify-center ${isToday ? "bg-paper-dim" : ""}`}
+                      >
+                      <span
+                        className={`block rounded-full ${done ? "bg-accent-done" : "border border-rule"}`}
+                        style={{ width: 15, height: 15 }}
+                      />
+                    </button>
+                  );
+                })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 px-4 pb-3 pt-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          placeholder="Add a habit…"
+          className="flex-1 min-w-0 border border-rule rounded-xl px-3 py-2 text-sm outline-none appearance-none"
+          style={{ backgroundColor: "var(--paper)", color: "var(--ink)", WebkitAppearance: "none" }}
+        />
+        <button onClick={submit} disabled={!name.trim()} className="shrink-0 rounded-xl bg-ink text-paper flex items-center justify-center disabled:opacity-30" style={{ width: 40, height: 40 }}>
+          <Plus size={16} />
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -1514,6 +1713,15 @@ function GuideOverlay({ onClose }) {
           </p>
         </GuideSection>
 
+        <GuideSection label="HABIT TRACKER" title="The classic grid, right in Monthly Log">
+          <p>
+            Open Monthly Log and you'll find a grid between the calendar and the task list:
+            habits down the side, days of the month across the top. Tap a cell to mark a habit
+            done for that day. Habits carry forward on their own from month to month — only the
+            marks are specific to a given day, the same way a tracker spread works on paper.
+          </p>
+        </GuideSection>
+
         <GuideSection label="GESTURES" title="Quick reference">
           <div className="rounded-xl border border-rule overflow-hidden px-3">
             <GuideRow icon={<span className="text-[13px]">→</span>} label="Swipe a bullet right">Marks a task done instantly.</GuideRow>
@@ -1593,7 +1801,7 @@ function RitualButton({ icon: Icon, label, onClick }) {
 // ---------------------------------------------------------------------------
 // Edit Sheet — full CRUD bottom sheet (text, type, priority, status, delete)
 // ---------------------------------------------------------------------------
-function EditSheet({ entry, onClose, onSave, onDelete, onComplete, onReopen, onMigrate, onSchedule, onIrrelevant, onThread, onMoveToDay, simple }) {
+function EditSheet({ entry, onClose, onSave, onDelete, onComplete, onReopen, onMigrate, onSchedule, onIrrelevant, onThread, onMoveToDay, onRemoveFromCollection, viewingCollectionId, simple }) {
   const [text, setText] = useState(entry.text);
   const [type, setType] = useState(entry.type);
   const [priority, setPriority] = useState(!!entry.priority);
@@ -1662,10 +1870,21 @@ function EditSheet({ entry, onClose, onSave, onDelete, onComplete, onReopen, onM
         </button>
       )}
 
-      {!simple && (
-        <button onClick={onThread} className="w-full flex items-center justify-center gap-2 py-1.5 rounded-xl border border-rule mb-2 text-xs font-medium">
-          <Link2 size={13} /> {entry.threadId ? "Change thread" : "Thread to collection"}
-        </button>
+      {!simple && viewingCollectionId && entry.threadId === viewingCollectionId ? (
+        <div className="flex items-center gap-2 mb-2">
+          <button onClick={onThread} className="flex-1 flex items-center justify-center gap-2 py-1.5 rounded-xl border border-rule text-xs font-medium">
+            <Link2 size={13} /> Change thread
+          </button>
+          <button onClick={onRemoveFromCollection} className="flex-1 flex items-center justify-center gap-2 py-1.5 rounded-xl border border-accent-priority text-accent-priority text-xs font-medium">
+            <X size={13} /> Remove from collection
+          </button>
+        </div>
+      ) : (
+        !simple && (
+          <button onClick={onThread} className="w-full flex items-center justify-center gap-2 py-1.5 rounded-xl border border-rule mb-2 text-xs font-medium">
+            <Link2 size={13} /> {entry.threadId ? "Change thread" : "Thread to collection"}
+          </button>
+        )
       )}
 
       <div className="flex items-center gap-2">
