@@ -3,7 +3,8 @@ import {
   Circle, Minus, Star, X, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight,
   CalendarDays, CalendarRange, BookOpen, Settings, Plus, Check, Sparkles,
   Download, Upload, Trash2, Link2, ArrowUpRight, Layers, Pencil, RotateCcw,
-  AlertTriangle, GripVertical, Sun, CloudSun, Cloud, CloudRain, HelpCircle, Flame
+  AlertTriangle, GripVertical, Sun, CloudSun, Cloud, CloudRain, HelpCircle, Flame,
+  ChevronUp, ChevronDown
 } from "lucide-react";
 
 /* ============================================================================
@@ -129,7 +130,7 @@ function useSwipeNav(onNext, onPrev) {
   const modeRef = useRef("idle");
 
   const onTouchStart = (e) => {
-    if (e.target.closest && e.target.closest("[data-swipe-row]")) {
+    if (e.target.closest && (e.target.closest("[data-swipe-row]") || e.target.closest("[data-no-swipe-nav]"))) {
       touchRef.current = null;
       return;
     }
@@ -212,7 +213,7 @@ export default function App() {
   const reload = useCallback(async () => {
     const [e, c, m] = await Promise.all([getAll("entries"), getAll("collections"), getAll("meta")]);
     setEntries(e);
-    setCollections(c.sort((a, b) => a.createdAt - b.createdAt));
+    setCollections(c.sort((a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt)));
     const metaObj = {};
     m.forEach((row) => { metaObj[row.key] = row.value; });
     setMeta(metaObj);
@@ -304,9 +305,30 @@ export default function App() {
     haptic(wasDone ? 8 : [10, 20, 10]);
   };
 
+  const renameHabit = async (id, name) => {
+    if (!name.trim()) return;
+    const list = meta.habits || [];
+    const next = list.map((h) => (h.id === id ? { ...h, name: name.trim() } : h));
+    await dbPut("meta", { key: "habits", value: next });
+    setMeta((prev) => ({ ...prev, habits: next }));
+  };
+
+  const moveHabit = async (id, direction) => {
+    const list = meta.habits || [];
+    const idx = list.findIndex((h) => h.id === id);
+    const newIdx = idx + direction;
+    if (idx === -1 || newIdx < 0 || newIdx >= list.length) return;
+    const next = [...list];
+    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+    await dbPut("meta", { key: "habits", value: next });
+    setMeta((prev) => ({ ...prev, habits: next }));
+    haptic(8);
+  };
+
   const createCollection = async (name) => {
     if (!name.trim()) return null;
-    const col = { id: uid(), name: name.trim(), createdAt: Date.now() };
+    const maxOrder = collections.length ? Math.max(...collections.map((c) => c.order ?? c.createdAt)) : 0;
+    const col = { id: uid(), name: name.trim(), createdAt: Date.now(), order: maxOrder + 1 };
     await dbPut("collections", col);
     setCollections((prev) => [...prev, col]);
     return col.id;
@@ -317,6 +339,27 @@ export default function App() {
     setCollections((prev) => prev.filter((c) => c.id !== id));
     const affected = entries.filter((e) => e.threadId === id);
     for (const e of affected) await updateEntry(e.id, { threadId: null });
+  };
+
+  const renameCollection = async (id, name) => {
+    if (!name.trim()) return;
+    const found = collections.find((c) => c.id === id);
+    if (!found) return;
+    const updated = { ...found, name: name.trim() };
+    await dbPut("collections", updated);
+    setCollections((prev) => prev.map((c) => (c.id === id ? updated : c)));
+  };
+
+  const moveCollection = async (id, direction) => {
+    const sorted = [...collections].sort((a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt));
+    const idx = sorted.findIndex((c) => c.id === id);
+    const newIdx = idx + direction;
+    if (idx === -1 || newIdx < 0 || newIdx >= sorted.length) return;
+    [sorted[idx], sorted[newIdx]] = [sorted[newIdx], sorted[idx]];
+    const withOrder = sorted.map((c, i) => ({ ...c, order: i }));
+    await dbBulkPut("collections", withOrder);
+    setCollections(withOrder);
+    haptic(8);
   };
 
   // -- task lifecycle actions ------------------------------------------------
@@ -502,6 +545,8 @@ export default function App() {
               onAddHabit={addHabit}
               onDeleteHabit={deleteHabit}
               onToggleHabitDay={toggleHabitDay}
+              onRenameHabit={renameHabit}
+              onMoveHabit={moveHabit}
             />
           )}
 
@@ -519,7 +564,7 @@ export default function App() {
           )}
 
           {view === "collections" && (
-            <CollectionsIndex collections={collections} entries={entries} onOpen={(id) => { setActiveCollectionId(id); setView("collection"); }} onCreate={createCollection} onDelete={deleteCollection} />
+            <CollectionsIndex collections={collections} entries={entries} onOpen={(id) => { setActiveCollectionId(id); setView("collection"); }} onCreate={createCollection} onDelete={deleteCollection} onRename={renameCollection} onMove={moveCollection} />
           )}
 
           {view === "collection" && activeCollection && (
@@ -547,7 +592,7 @@ export default function App() {
               placeholder={view === "collection" ? `Add to ${activeCollection?.name || "collection"}…` : view === "monthly" ? `Add to ${MONTH_NAMES[activeMonth.getMonth()]}…` : "Log it…"}
             />
           )}
-          <BottomNav view={view} setView={setView} />
+          <BottomNav view={view} setView={setView} onGoToday={() => setActiveDate(new Date())} onGoCurrentMonth={() => setActiveMonth(new Date())} />
         </div>
 
         {reflectionOpen && (
@@ -745,7 +790,8 @@ function TopBar({ view, activeDate, activeCollection, onBack }) {
 // ---------------------------------------------------------------------------
 // Bottom navigation — respects home indicator safe area, normal document flow
 // ---------------------------------------------------------------------------
-function BottomNav({ view, setView }) {
+function BottomNav({ view, setView, onGoToday, onGoCurrentMonth }) {
+  const lastTapRef = useRef({});
   const items = [
     { key: "daily", icon: CalendarDays, label: "Day" },
     { key: "monthly", icon: CalendarRange, label: "Month" },
@@ -753,6 +799,19 @@ function BottomNav({ view, setView }) {
     { key: "collections", icon: BookOpen, label: "Index" },
     { key: "settings", icon: Settings, label: "Settings" },
   ];
+
+  const handleTap = (key) => {
+    const now = Date.now();
+    const isDoubleTap = now - (lastTapRef.current[key] || 0) < 350;
+    lastTapRef.current[key] = isDoubleTap ? 0 : now;
+    setView(key);
+    if (isDoubleTap) {
+      if (key === "daily" && onGoToday) onGoToday();
+      if (key === "monthly" && onGoCurrentMonth) onGoCurrentMonth();
+      haptic(10);
+    }
+  };
+
   return (
     <nav className="border-t border-rule bg-paper-card flex items-stretch" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       {items.map(({ key, icon: Icon, label }) => {
@@ -760,7 +819,7 @@ function BottomNav({ view, setView }) {
         return (
           <button
             key={key}
-            onClick={() => setView(key)}
+            onClick={() => handleTap(key)}
             className="flex-1 flex flex-col items-center justify-center gap-1 pt-2 pb-1.5 active:opacity-60 min-w-0"
             style={{ minHeight: 52 }}
           >
@@ -1148,7 +1207,7 @@ function DailyLog({ activeDate, setActiveDate, entries, mood, setMood, onToggleT
 // Monthly Log — dual pane: date list + open-ended monthly tasks (now editable
 // via the shared rapid-log bar and rollover from last month)
 // ---------------------------------------------------------------------------
-function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, rolloverCandidates, onRollover, onJumpToDay, onToggleTask, onDelete, onEdit, onReorder, collections, onJumpToCollection, onJumpToFuture, habits, habitLog, onAddHabit, onDeleteHabit, onToggleHabitDay }) {
+function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, rolloverCandidates, onRollover, onJumpToDay, onToggleTask, onDelete, onEdit, onReorder, collections, onJumpToCollection, onJumpToFuture, habits, habitLog, onAddHabit, onDeleteHabit, onToggleHabitDay, onRenameHabit, onMoveHabit }) {
   const year = activeMonth.getFullYear();
   const monthIdx = activeMonth.getMonth();
   const total = daysInMonth(year, monthIdx);
@@ -1176,7 +1235,18 @@ function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, roll
         <button onClick={() => setActiveMonth(addMonths(activeMonth, 1))} className="p-2" style={{ minWidth: 44, minHeight: 44 }}><ChevronRight size={20} /></button>
       </div>
 
-      <section className="rounded-2xl bg-paper-card border border-rule mb-4 mt-3 overflow-hidden">
+      <HabitTracker
+        activeMonth={activeMonth}
+        habits={habits}
+        habitLog={habitLog}
+        onAddHabit={onAddHabit}
+        onDeleteHabit={onDeleteHabit}
+        onToggleHabitDay={onToggleHabitDay}
+        onRenameHabit={onRenameHabit}
+        onMoveHabit={onMoveHabit}
+      />
+
+      <section className="rounded-2xl bg-paper-card border border-rule mb-4 overflow-hidden">
         <h3 className="font-mono text-[11px] tracking-widest text-ink-faint px-4 pt-3 pb-1">CALENDAR</h3>
         <div className="px-2 pb-2">
           {rows.map((d) => {
@@ -1205,15 +1275,6 @@ function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, roll
           })}
         </div>
       </section>
-
-      <HabitTracker
-        activeMonth={activeMonth}
-        habits={habits}
-        habitLog={habitLog}
-        onAddHabit={onAddHabit}
-        onDeleteHabit={onDeleteHabit}
-        onToggleHabitDay={onToggleHabitDay}
-      />
 
       <section className="rounded-2xl bg-paper-card border border-rule px-4 pt-1 overflow-hidden">
         <h3 className="font-mono text-[11px] tracking-widest text-ink-faint pt-3 pb-2">MONTHLY TASKS</h3>
@@ -1246,7 +1307,7 @@ function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, roll
 const HABIT_CELL = 30;
 const HABIT_NAME_COL = 144;
 
-function HabitTracker({ activeMonth, habits, habitLog, onAddHabit, onDeleteHabit, onToggleHabitDay }) {
+function HabitTracker({ activeMonth, habits, habitLog, onAddHabit, onDeleteHabit, onToggleHabitDay, onRenameHabit, onMoveHabit }) {
   const [name, setName] = useState("");
   const [managing, setManaging] = useState(false);
   const scrollRef = useRef(null);
@@ -1284,7 +1345,7 @@ function HabitTracker({ activeMonth, habits, habitLog, onAddHabit, onDeleteHabit
       {habits.length === 0 ? (
         <p className="px-4 pb-3 text-sm text-ink-faint">No habits yet — add one below to start tracking it day by day.</p>
       ) : (
-        <div ref={scrollRef} className="overflow-x-auto pr-4 pb-1" style={{ scrollSnapType: "x proximity" }}>
+        <div ref={scrollRef} data-no-swipe-nav="true" className="overflow-x-auto pr-4 pb-1" style={{ scrollSnapType: "x proximity" }}>
           <div style={{ minWidth: HABIT_NAME_COL + total * HABIT_CELL }}>
             <div className="flex">
               <div style={{ width: HABIT_NAME_COL }} className="shrink-0 sticky left-0 z-10 bg-paper-card pl-4" />
@@ -1298,25 +1359,42 @@ function HabitTracker({ activeMonth, habits, habitLog, onAddHabit, onDeleteHabit
                 );
               })}
             </div>
-            {habits.map((h) => {
+            {habits.map((h, idx) => {
               const { streak, total: totalDone } = habitStats(habitLog, h.id);
               return (
                 <div key={h.id} className="flex items-start border-t border-rule-70">
-                  <div style={{ width: HABIT_NAME_COL }} className="shrink-0 sticky left-0 z-10 bg-paper-card pl-4 pr-1 py-1.5 flex items-start gap-1 min-w-0" >
-                    <span className="text-[12px] leading-tight break-words min-w-0 flex-1" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{h.name}</span>
+                  <div style={{ width: HABIT_NAME_COL }} className="shrink-0 sticky left-0 z-10 bg-paper-card pl-4 pr-1 py-1.5 min-w-0">
                     {managing ? (
-                      <div className="shrink-0 flex flex-col items-end gap-1 pt-0.5">
-                        {totalDone > 0 && <span className="text-[9px] font-mono text-ink-faint whitespace-nowrap">{totalDone}×</span>}
-                        <button onClick={() => onDeleteHabit(h.id)} className="text-accent-priority" style={{ minWidth: 22, minHeight: 22 }}>
-                          <Trash2 size={12} />
-                        </button>
+                      <div className="flex flex-col gap-1">
+                        <input
+                          defaultValue={h.name}
+                          onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== h.name) onRenameHabit(h.id, v); }}
+                          onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+                          className="text-[12px] leading-tight bg-transparent border-b border-rule outline-none min-w-0 w-full appearance-none"
+                          style={{ color: "var(--ink)", WebkitAppearance: "none" }}
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => onMoveHabit(h.id, -1)} disabled={idx === 0} className="text-ink-faint disabled:opacity-20" style={{ width: 18, height: 18 }}>
+                            <ChevronUp size={13} />
+                          </button>
+                          <button onClick={() => onMoveHabit(h.id, 1)} disabled={idx === habits.length - 1} className="text-ink-faint disabled:opacity-20" style={{ width: 18, height: 18 }}>
+                            <ChevronDown size={13} />
+                          </button>
+                          {totalDone > 0 && <span className="text-[9px] font-mono text-ink-faint ml-auto whitespace-nowrap">{totalDone}×</span>}
+                          <button onClick={() => onDeleteHabit(h.id)} className="text-accent-priority shrink-0" style={{ width: 18, height: 18 }}>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      streak > 0 && (
-                        <span className="shrink-0 flex items-center gap-0.5 text-[10px] font-mono text-accent-priority pt-0.5" title={`${streak}-day streak`}>
-                          <Flame size={11} /> {streak}
-                        </span>
-                      )
+                      <div className="flex items-start gap-1">
+                        <span className="text-[12px] leading-tight break-words min-w-0 flex-1" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{h.name}</span>
+                        {streak > 0 && (
+                          <span className="shrink-0 flex items-center gap-0.5 text-[10px] font-mono text-accent-priority pt-0.5" title={`${streak}-day streak`}>
+                            <Flame size={11} /> {streak}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                   {days.map((d) => {
@@ -1433,8 +1511,9 @@ function FutureLog({ entries, onAdd, onToggleTask, onDelete, onEdit }) {
 // ---------------------------------------------------------------------------
 // Collections index + collection page (with threading)
 // ---------------------------------------------------------------------------
-function CollectionsIndex({ collections, entries, onOpen, onCreate, onDelete }) {
+function CollectionsIndex({ collections, entries, onOpen, onCreate, onDelete, onRename, onMove }) {
   const [name, setName] = useState("");
+  const [managing, setManaging] = useState(false);
   return (
     <div>
       <div className="flex items-center gap-2 py-2">
@@ -1454,22 +1533,51 @@ function CollectionsIndex({ collections, entries, onOpen, onCreate, onDelete }) 
       {collections.length === 0 ? (
         <p className="py-10 text-center text-sm text-ink-faint">No collections yet — create an index page for a project, book list, or anything worth tracking on its own page.</p>
       ) : (
-        <div className="space-y-2 mt-2">
-          {collections.map((c) => {
-            const count = entries.filter((e) => e.collectionId === c.id).length;
-            const threadCount = entries.filter((e) => e.threadId === c.id && e.collectionId !== c.id).length;
-            const total = count + threadCount;
-            return (
-              <div key={c.id} className="flex items-center gap-2 rounded-2xl bg-paper-card border border-rule px-4 py-3">
-                <button onClick={() => onOpen(c.id)} className="flex-1 min-w-0 text-left">
-                  <p className="font-serif-display text-base truncate">{c.name}</p>
-                  <p className="font-mono text-[10px] text-ink-faint">{total} item{total !== 1 ? "s" : ""}{threadCount ? ` (${threadCount} threaded)` : ""}</p>
-                </button>
-                <button onClick={() => onDelete(c.id)} className="shrink-0 p-2 text-ink-faint" style={{ minWidth: 40, minHeight: 40 }}><Trash2 size={16} /></button>
-              </div>
-            );
-          })}
-        </div>
+        <>
+          <div className="flex items-center justify-between mt-3 mb-1 px-1">
+            <h3 className="font-mono text-[11px] tracking-widest text-ink-faint">YOUR COLLECTIONS</h3>
+            <button onClick={() => setManaging((m) => !m)} className="text-[11px] font-mono text-accent-event">{managing ? "Done" : "Edit"}</button>
+          </div>
+          <div className="space-y-2">
+            {collections.map((c, idx) => {
+              const count = entries.filter((e) => e.collectionId === c.id).length;
+              const threadCount = entries.filter((e) => e.threadId === c.id && e.collectionId !== c.id).length;
+              const total = count + threadCount;
+              return (
+                <div key={c.id} className="flex items-center gap-2 rounded-2xl bg-paper-card border border-rule px-4 py-3">
+                  {managing ? (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <input
+                          defaultValue={c.name}
+                          onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== c.name) onRename(c.id, v); }}
+                          onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+                          className="font-serif-display text-base bg-transparent border-b border-rule outline-none w-full appearance-none"
+                          style={{ color: "var(--ink)", WebkitAppearance: "none" }}
+                        />
+                        <p className="font-mono text-[10px] text-ink-faint mt-0.5">{total} item{total !== 1 ? "s" : ""}{threadCount ? ` (${threadCount} threaded)` : ""}</p>
+                      </div>
+                      <div className="shrink-0 flex flex-col">
+                        <button onClick={() => onMove(c.id, -1)} disabled={idx === 0} className="text-ink-faint disabled:opacity-20" style={{ width: 28, height: 22 }}>
+                          <ChevronUp size={14} />
+                        </button>
+                        <button onClick={() => onMove(c.id, 1)} disabled={idx === collections.length - 1} className="text-ink-faint disabled:opacity-20" style={{ width: 28, height: 22 }}>
+                          <ChevronDown size={14} />
+                        </button>
+                      </div>
+                      <button onClick={() => onDelete(c.id)} className="shrink-0 p-2 text-accent-priority" style={{ minWidth: 40, minHeight: 40 }}><Trash2 size={16} /></button>
+                    </>
+                  ) : (
+                    <button onClick={() => onOpen(c.id)} className="flex-1 min-w-0 text-left">
+                      <p className="font-serif-display text-base truncate">{c.name}</p>
+                      <p className="font-mono text-[10px] text-ink-faint">{total} item{total !== 1 ? "s" : ""}{threadCount ? ` (${threadCount} threaded)` : ""}</p>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
@@ -1711,14 +1819,23 @@ function GuideOverlay({ onClose }) {
             collection. The bullet still lives on its original day; the collection just keeps an
             index of everything that points to it.
           </p>
+          <p>
+            From the Index tab, tap <strong>Edit</strong> to rename a collection or reorder the list —
+            handy once you've got more than a couple.
+          </p>
         </GuideSection>
 
         <GuideSection label="HABIT TRACKER" title="The classic grid, right in Monthly Log">
           <p>
-            Open Monthly Log and you'll find a grid between the calendar and the task list:
-            habits down the side, days of the month across the top. Tap a cell to mark a habit
-            done for that day. Habits carry forward on their own from month to month — only the
-            marks are specific to a given day, the same way a tracker spread works on paper.
+            Open Monthly Log and the first thing you'll see is a grid: habits down the side,
+            days of the month across the top. Tap a cell to mark a habit done for that day.
+            Habits carry forward on their own from month to month — only the marks are specific
+            to a given day, the same way a tracker spread works on paper.
+          </p>
+          <p>
+            A flame badge next to each habit shows your current streak. Tap <strong>Edit</strong> to
+            rename a habit, reorder the list with the arrows, or remove one — deleting a habit
+            clears its history along with it.
           </p>
         </GuideSection>
 
@@ -1729,6 +1846,7 @@ function GuideOverlay({ onClose }) {
             <GuideRow icon={<Pencil size={14} />} label="Tap a bullet">Opens the full edit sheet.</GuideRow>
             <GuideRow icon={<GripVertical size={14} />} label="Hold and drag">Reorders bullets within their list.</GuideRow>
             <GuideRow icon={<span className="text-[13px]">⇄</span>} label="Swipe the page">Moves to the previous/next day or month.</GuideRow>
+            <GuideRow icon={<span className="text-[13px] font-bold">2×</span>} label="Double-tap Day or Month">Jumps straight back to today or the current month.</GuideRow>
           </div>
         </GuideSection>
 
