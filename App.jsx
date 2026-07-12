@@ -426,9 +426,9 @@ export default function App() {
   };
 
   return (
-    <div className="h-dvh w-full flex justify-center bg-paper-dim" style={viewportHeight ? { height: viewportHeight } : undefined}>
+    <div className="h-dvh w-full flex justify-center" style={{ ...(viewportHeight ? { height: viewportHeight } : null), background: "magenta" }}>
       <StyleSheet />
-      <div className="bujo-root relative flex flex-col w-full max-w-md h-full overflow-hidden bg-paper text-ink md:my-4 md:rounded-[2rem] md:shadow-2xl md:h-[min(900px,calc(100vh-2rem))]">
+      <div className="bujo-root relative flex flex-col w-full max-w-md h-full overflow-hidden text-ink md:my-4 md:rounded-[2rem] md:shadow-2xl md:h-[min(900px,calc(100vh-2rem))]" style={{ background: "cyan" }}>
         <TopBar view={view} setView={setView} activeDate={activeDate} activeCollection={activeCollection} onBack={() => { setView("collections"); setActiveCollectionId(null); }} />
 
         {showBackupBanner && (
