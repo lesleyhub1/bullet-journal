@@ -393,7 +393,7 @@ export default function App() {
   return (
     <div className="fixed inset-0 flex justify-center bg-paper-dim">
       <StyleSheet />
-      <div className="bujo-root relative flex flex-col w-full max-w-md h-full overflow-hidden bg-paper text-ink md:my-4 md:rounded-[2rem] md:shadow-2xl md:h-[min(900px,calc(100vh-2rem))]">
+      <div className="bujo-root relative flex flex-col w-full max-w-md h-full overflow-hidden bg-paper text-ink md:my-4 md:shadow-2xl">
         <TopBar view={view} setView={setView} activeDate={activeDate} activeCollection={activeCollection} onBack={() => { setView("collections"); setActiveCollectionId(null); }} />
 
         {showBackupBanner && (
@@ -609,7 +609,7 @@ function StyleSheet() {
 
       .ritual-btn:active { background-color: rgba(246,242,232,.10); }
       @media (min-width: 768px) {
-        .bujo-root { border: 1px solid var(--rule); }
+        .bujo-root { border: 1px solid var(--rule); border-radius: 2rem; height: min(900px, calc(100vh - 2rem)); }
       }
 
       @keyframes fadein { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: translateY(0);} }
