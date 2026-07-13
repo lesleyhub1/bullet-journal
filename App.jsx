@@ -206,6 +206,7 @@ export default function App() {
   const [dayPickerFor, setDayPickerFor] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [editingViewCollectionId, setEditingViewCollectionId] = useState(null);
+  const [editingSimple, setEditingSimple] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [toast, setToast] = useState(null);
@@ -513,7 +514,7 @@ export default function App() {
               setMood={(v) => setMood(dateKey, v)}
               onToggleTask={(e) => (e.status === "done" ? reopenTask(e.id) : completeTask(e.id))}
               onDelete={removeEntry}
-              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); }}
+              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); setEditingSimple(false); }}
               onReorder={persistOrder}
               onOpenReflection={() => setReflectionOpen(true)}
               collections={collections}
@@ -535,7 +536,7 @@ export default function App() {
               onJumpToDay={(dk) => { setActiveDate(new Date(dk + "T00:00:00")); setView("daily"); }}
               onToggleTask={(e) => updateEntry(e.id, { status: e.status === "done" ? "open" : "done" })}
               onDelete={removeEntry}
-              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); }}
+              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); setEditingSimple(false); }}
               onReorder={persistOrder}
               collections={collections}
               onJumpToCollection={(id) => { setActiveCollectionId(id); setView("collection"); }}
@@ -559,7 +560,7 @@ export default function App() {
               }}
               onToggleTask={(e) => updateEntry(e.id, { status: e.status === "done" ? "open" : "done" })}
               onDelete={removeEntry}
-              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); }}
+              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(null); setEditingSimple(true); }}
             />
           )}
 
@@ -573,7 +574,7 @@ export default function App() {
               entries={entries.filter((e) => e.collectionId === activeCollection.id || e.threadId === activeCollection.id)}
               onToggleTask={(e) => updateEntry(e.id, { status: e.status === "done" ? "open" : "done" })}
               onDelete={removeEntry}
-              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(activeCollection.id); }}
+              onEdit={(entry) => { setEditingEntry(entry); setEditingViewCollectionId(activeCollection.id); setEditingSimple(false); }}
               onReorder={persistOrder}
               collections={collections}
               onJumpToDay={(dk) => { setActiveDate(new Date(dk + "T00:00:00")); setView("daily"); }}
@@ -600,7 +601,7 @@ export default function App() {
             entries={dayEntries.filter((e) => e.type === "task" && e.status === "open")}
             onComplete={completeTask}
             onMigrate={(id) => migrateTask(id)}
-            onSchedule={(id) => setScheduleFor(id)}
+            onSchedule={scheduleTask}
             onIrrelevant={markIrrelevant}
             onClose={() => setReflectionOpen(false)}
           />
@@ -637,18 +638,18 @@ export default function App() {
           <EditSheet
             entry={editingEntry}
             viewingCollectionId={editingViewCollectionId}
-            onClose={() => { setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onSave={(patch) => { updateEntry(editingEntry.id, patch); setEditingEntry(null); setEditingViewCollectionId(null); haptic(10); }}
-            onDelete={() => { removeEntry(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onComplete={() => { completeTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onReopen={() => { reopenTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onMigrate={() => { migrateTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onSchedule={() => { setScheduleFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onIrrelevant={() => { markIrrelevant(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onThread={() => { setThreadPickerFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onMoveToDay={() => { setDayPickerFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); }}
-            onRemoveFromCollection={() => { removeThreadFromEntry(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); flash("Removed from collection"); }}
-            simple={!!editingEntry.futureKey}
+            onClose={() => { setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onSave={(patch) => { updateEntry(editingEntry.id, patch); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); haptic(10); }}
+            onDelete={() => { removeEntry(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onComplete={() => { completeTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onReopen={() => { reopenTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onMigrate={() => { migrateTask(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onSchedule={() => { setScheduleFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onIrrelevant={() => { markIrrelevant(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onThread={() => { setThreadPickerFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onMoveToDay={() => { setDayPickerFor(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); }}
+            onRemoveFromCollection={() => { removeThreadFromEntry(editingEntry.id); setEditingEntry(null); setEditingViewCollectionId(null); setEditingSimple(false); flash("Removed from collection"); }}
+            simple={editingSimple}
           />
         )}
 
@@ -1869,10 +1870,17 @@ function GuideOverlay({ onClose }) {
 function ReflectionMode({ entries, onComplete, onMigrate, onSchedule, onIrrelevant, onClose }) {
   const [index, setIndex] = useState(0);
   const [remaining] = useState(entries);
+  const [pickingMonth, setPickingMonth] = useState(false);
   const current = remaining[index];
 
   const advance = () => { if (index >= remaining.length - 1) onClose(); else setIndex((i) => i + 1); };
   const act = (fn) => (id) => { fn(id); advance(); };
+
+  const handleScheduled = (futureKey) => {
+    onSchedule(current.id, futureKey);
+    setPickingMonth(false);
+    advance();
+  };
 
   if (!current) {
     return (
@@ -1900,9 +1908,13 @@ function ReflectionMode({ entries, onComplete, onMigrate, onSchedule, onIrreleva
       <div className="px-5 pb-8 grid grid-cols-2 gap-3">
         <RitualButton icon={Check} label="Done" onClick={() => act(onComplete)(current.id)} />
         <RitualButton icon={ArrowRight} label="Migrate → tomorrow" onClick={() => act(onMigrate)(current.id)} />
-        <RitualButton icon={ArrowLeft} label="Schedule → future" onClick={() => onSchedule(current.id)} />
+        <RitualButton icon={ArrowLeft} label="Schedule → future" onClick={() => setPickingMonth(true)} />
         <RitualButton icon={Minus} label="Irrelevant" onClick={() => act(onIrrelevant)(current.id)} />
       </div>
+
+      {pickingMonth && (
+        <MonthPickerModal onPick={handleScheduled} onClose={() => setPickingMonth(false)} />
+      )}
     </div>
   );
 }
