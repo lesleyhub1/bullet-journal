@@ -105,6 +105,19 @@ const WEEKDAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAY_MS = 86400000;
 
+// env(safe-area-inset-bottom) has a documented iOS bug: it can report 0px in
+// standalone (home-screen) mode — reliably right after "Add to Home Screen,"
+// then intermittently 0 on later relaunches — even though the home indicator
+// is genuinely present and still needs clearance. This only affects
+// standalone mode; in a regular Safari tab, 0px is correct (Safari's own
+// bottom bar already occupies that space) and must be left alone. Detecting
+// standalone mode directly in JS and enforcing a known-good 34px floor there
+// sidesteps the unreliable env() value specifically where it's unreliable.
+const IS_STANDALONE =
+  typeof window !== "undefined" &&
+  (window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches);
+const SAFE_BOTTOM = IS_STANDALONE ? "max(env(safe-area-inset-bottom), 34px)" : "env(safe-area-inset-bottom)";
+
 function haptic(pattern = 10) {
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
 }
@@ -814,7 +827,7 @@ function BottomNav({ view, setView, onGoToday, onGoCurrentMonth }) {
   };
 
   return (
-    <nav className="border-t border-rule bg-paper-card flex items-stretch" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+    <nav className="border-t border-rule bg-paper-card flex items-stretch" style={{ paddingBottom: SAFE_BOTTOM }}>
       {items.map(({ key, icon: Icon, label }) => {
         const active = view === key || (key === "collections" && view === "collection");
         return (
@@ -1706,7 +1719,7 @@ function FlowDiagram() {
 
 function GuideOverlay({ onClose }) {
   return (
-    <div className="fixed inset-0 z-50 bg-paper flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+    <div className="fixed inset-0 z-50 bg-paper flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: SAFE_BOTTOM }}>
       <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-rule">
         <h2 className="font-serif-display text-xl">How this journal works</h2>
         <button onClick={onClose} className="p-2 -mr-2" style={{ minWidth: 44, minHeight: 44 }}><X size={20} /></button>
@@ -1893,7 +1906,7 @@ function ReflectionMode({ entries, onComplete, onMigrate, onSchedule, onIrreleva
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-ink text-paper flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+    <div className="fixed inset-0 z-50 bg-ink text-paper flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: SAFE_BOTTOM }}>
       <div className="flex items-center justify-between px-5 pt-4">
         <span className="font-mono text-xs opacity-60">{index + 1} / {remaining.length}</span>
         <button onClick={onClose} className="p-2" style={{ minWidth: 44, minHeight: 44 }}><X size={20} /></button>
@@ -2108,7 +2121,7 @@ function ModalShell({ title, children, onClose }) {
       <div className="absolute inset-0 bg-black/30 animate-fadein" />
       <div
         className="relative w-full max-w-md mx-auto bg-paper-card rounded-t-3xl p-4 animate-sheetup max-h-[85vh] overflow-y-auto"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
+        style={{ paddingBottom: `calc(${SAFE_BOTTOM} + 12px)` }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 rounded-full bg-rule mx-auto mb-2" />
