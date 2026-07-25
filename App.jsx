@@ -4,7 +4,7 @@ import {
   CalendarDays, CalendarRange, BookOpen, Settings, Plus, Check, Sparkles,
   Download, Upload, Trash2, Link2, ArrowUpRight, Layers, Pencil, RotateCcw,
   AlertTriangle, GripVertical, Sun, CloudSun, Cloud, CloudRain, HelpCircle, Flame,
-  ChevronUp, ChevronDown
+  ChevronUp, ChevronDown, Search
 } from "lucide-react";
 
 /* ============================================================================
@@ -85,6 +85,23 @@ const toMonthKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 const addMonths = (d, n) => { const r = new Date(d); r.setMonth(r.getMonth() + n); return r; };
 const formatShortDate = (dateKey) => new Date(dateKey + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+function entryHomeLabel(entry, collections) {
+  if (entry.date) return formatShortDate(entry.date);
+  if (entry.monthKey) {
+    const [y, m] = entry.monthKey.split("-").map(Number);
+    return `${MONTH_NAMES[m - 1]} · Monthly`;
+  }
+  if (entry.futureKey) {
+    const [y, m] = entry.futureKey.split("-").map(Number);
+    return `${MONTH_NAMES[m - 1]} · Future`;
+  }
+  if (entry.collectionId) {
+    const c = collections.find((x) => x.id === entry.collectionId);
+    return c ? c.name : "Collection";
+  }
+  return "";
+}
 
 function habitStats(habitLog, habitId) {
   const prefix = `habit-log-${habitId}-`;
@@ -220,6 +237,7 @@ export default function App() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [editingViewCollectionId, setEditingViewCollectionId] = useState(null);
   const [editingSimple, setEditingSimple] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [toast, setToast] = useState(null);
@@ -511,7 +529,7 @@ export default function App() {
     <div className="fixed inset-0 flex justify-center bg-paper-dim">
       <StyleSheet />
       <div className="bujo-root relative flex flex-col w-full max-w-md h-full overflow-hidden bg-paper text-ink md:my-4 md:shadow-2xl">
-        <TopBar view={view} setView={setView} activeDate={activeDate} activeCollection={activeCollection} onBack={() => { setView("collections"); setActiveCollectionId(null); }} />
+        <TopBar view={view} setView={setView} activeDate={activeDate} activeCollection={activeCollection} onBack={() => { setView("collections"); setActiveCollectionId(null); }} onOpenSearch={() => setSearchOpen(true)} />
 
         {showBackupBanner && (
           <BackupBanner days={daysSinceExport} onExport={exportBackup} onDismiss={() => setBannerDismissed(true)} />
@@ -621,6 +639,20 @@ export default function App() {
         )}
 
         {guideOpen && <GuideOverlay onClose={() => setGuideOpen(false)} />}
+
+        {searchOpen && (
+          <SearchOverlay
+            entries={entries}
+            collections={collections}
+            onClose={() => setSearchOpen(false)}
+            onSelect={(entry) => {
+              setSearchOpen(false);
+              setEditingEntry(entry);
+              setEditingViewCollectionId(null);
+              setEditingSimple(false);
+            }}
+          />
+        )}
 
         {scheduleFor && (
           <MonthPickerModal onPick={(fk) => { scheduleTask(scheduleFor, fk); setScheduleFor(null); }} onClose={() => setScheduleFor(null)} />
@@ -770,7 +802,7 @@ function BackupBanner({ days, onExport, onDismiss }) {
 // ---------------------------------------------------------------------------
 // Top bar
 // ---------------------------------------------------------------------------
-function TopBar({ view, activeDate, activeCollection, onBack }) {
+function TopBar({ view, activeDate, activeCollection, onBack, onOpenSearch }) {
   const titleMap = {
     daily: activeDate.toLocaleDateString(undefined, { weekday: "long" }),
     monthly: "Monthly Log",
@@ -796,7 +828,9 @@ function TopBar({ view, activeDate, activeCollection, onBack }) {
           )}
         </div>
       </div>
-      <div className="w-2 h-2 rounded-full bg-accent-priority shrink-0" />
+      <button onClick={onOpenSearch} className="p-2 -mr-2 rounded-full active:bg-black/5 shrink-0" style={{ minWidth: 44, minHeight: 44 }}>
+        <Search size={20} className="text-ink-faint" />
+      </button>
     </header>
   );
 }
@@ -1243,7 +1277,7 @@ function MonthlyLog({ activeMonth, setActiveMonth, dayEntries, taskEntries, roll
 
   return (
     <div {...swipeHandlers} className="min-h-full flex flex-col">
-      <div className="sticky top-0 z-10 -mx-4 px-4 bg-paper flex items-center justify-between py-2 border-b border-rule">
+      <div className="sticky top-0 z-20 -mx-4 px-4 bg-paper flex items-center justify-between py-2 border-b border-rule">
         <button onClick={() => setActiveMonth(addMonths(activeMonth, -1))} className="p-2" style={{ minWidth: 44, minHeight: 44 }}><ChevronLeft size={20} /></button>
         <h2 className="font-serif-display text-xl">{MONTH_NAMES[monthIdx]} {year}</h2>
         <button onClick={() => setActiveMonth(addMonths(activeMonth, 1))} className="p-2" style={{ minWidth: 44, minHeight: 44 }}><ChevronRight size={20} /></button>
@@ -1861,6 +1895,7 @@ function GuideOverlay({ onClose }) {
             <GuideRow icon={<GripVertical size={14} />} label="Hold and drag">Reorders bullets within their list.</GuideRow>
             <GuideRow icon={<span className="text-[13px]">⇄</span>} label="Swipe the page">Moves to the previous/next day or month.</GuideRow>
             <GuideRow icon={<span className="text-[13px] font-bold">2×</span>} label="Double-tap Day or Month">Jumps straight back to today or the current month.</GuideRow>
+            <GuideRow icon={<Search size={14} />} label="Search icon (top right)">Finds any bullet by keyword, wherever it lives.</GuideRow>
           </div>
         </GuideSection>
 
@@ -1872,6 +1907,84 @@ function GuideOverlay({ onClose }) {
             plain JSON file you control.
           </p>
         </GuideSection>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Search — live keyword search across every bullet, regardless of which page
+// it lives on. Tapping a result opens the edit sheet directly.
+// ---------------------------------------------------------------------------
+function SearchOverlay({ entries, collections, onClose, onSelect }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+
+  const results = useMemo(() => {
+    if (!q) return [];
+    return entries
+      .filter((e) => e.text && e.text.toLowerCase().includes(q))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 100);
+  }, [entries, q]);
+
+  const highlight = (text) => {
+    const idx = text.toLowerCase().indexOf(q);
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <span className="bg-accent-priority-10 text-accent-priority font-medium">{text.slice(idx, idx + q.length)}</span>
+        {text.slice(idx + q.length)}
+      </>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-paper flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: SAFE_BOTTOM }}>
+      <div className="shrink-0 flex items-center gap-2 px-5 pt-4 pb-3 border-b border-rule">
+        <div className="flex-1 min-w-0 flex items-center gap-2 bg-paper-card rounded-2xl border border-rule px-3" style={{ minHeight: 44 }}>
+          <Search size={16} className="text-ink-faint shrink-0" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search your bullets…"
+            className="flex-1 min-w-0 bg-transparent outline-none py-2.5 text-[15px] appearance-none"
+            style={{ color: "var(--ink)", WebkitAppearance: "none" }}
+            enterKeyHint="search"
+          />
+        </div>
+        <button onClick={onClose} className="p-2 shrink-0" style={{ minWidth: 44, minHeight: 44 }}><X size={20} /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-3">
+        {!q ? (
+          <p className="py-10 text-center text-sm text-ink-faint">Type to search across every bullet you've logged — daily, monthly, future, and collections.</p>
+        ) : results.length === 0 ? (
+          <p className="py-10 text-center text-sm text-ink-faint">No bullets match "{query.trim()}".</p>
+        ) : (
+          <div className="rounded-2xl bg-paper-card border border-rule px-4 pt-1 overflow-hidden">
+            {results.map((entry) => (
+              <button
+                key={entry.id}
+                onClick={() => onSelect(entry)}
+                className="w-full flex items-start gap-3 py-2.5 border-b border-rule-70 last:border-b-0 text-left"
+              >
+                <span className="mt-0.5 shrink-0 flex items-center justify-center" style={{ width: 22, height: 22 }}>
+                  <Signifier entry={entry} size={17} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] leading-snug break-words text-ink">
+                    {entry.priority && <Star size={12} className="inline mr-1 -mt-0.5 text-accent-priority" fill="var(--accent-priority)" />}
+                    {highlight(entry.text)}
+                  </p>
+                  <p className="text-[11px] font-mono text-ink-faint mt-0.5">{entryHomeLabel(entry, collections)}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
