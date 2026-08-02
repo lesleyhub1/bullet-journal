@@ -208,6 +208,7 @@ function Signifier({ entry, size = 18 }) {
     if (entry.status === "irrelevant") return <Minus size={size} strokeWidth={2.2} className="text-ink-faint rotate-45" />;
     return <span className="block rounded-full" style={{ width: size * 0.42, height: size * 0.42, background: "var(--ink)" }} />;
   }
+  if (entry.status === "irrelevant") return <Minus size={size} strokeWidth={2.2} className="text-ink-faint rotate-45" />;
   if (entry.type === "event") return <Circle size={size * 0.62} strokeWidth={2.2} className="text-ink" />;
   return <Minus size={size * 0.8} strokeWidth={2.4} className="text-ink" />;
 }
@@ -1895,7 +1896,7 @@ function GuideOverlay({ onClose }) {
             <GuideRow icon={<GripVertical size={14} />} label="Hold and drag">Reorders bullets within their list.</GuideRow>
             <GuideRow icon={<span className="text-[13px]">⇄</span>} label="Swipe the page">Moves to the previous/next day or month.</GuideRow>
             <GuideRow icon={<span className="text-[13px] font-bold">2×</span>} label="Double-tap Day or Month">Jumps straight back to today or the current month.</GuideRow>
-            <GuideRow icon={<Search size={14} />} label="Search icon (top right)">Finds any bullet by keyword, wherever it lives.</GuideRow>
+            <GuideRow icon={<Search size={14} />} label="Search icon (top right)">Finds any bullet by keyword — filter by type or Priority too, with or without a keyword.</GuideRow>
           </div>
         </GuideSection>
 
@@ -1918,17 +1919,26 @@ function GuideOverlay({ onClose }) {
 // ---------------------------------------------------------------------------
 function SearchOverlay({ entries, collections, onClose, onSelect }) {
   const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState([]);
+  const [priorityOnly, setPriorityOnly] = useState(false);
   const q = query.trim().toLowerCase();
+  const hasCriteria = !!q || typeFilter.length > 0 || priorityOnly;
+
+  const toggleType = (t) => {
+    setTypeFilter((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  };
 
   const results = useMemo(() => {
-    if (!q) return [];
-    return entries
-      .filter((e) => e.text && e.text.toLowerCase().includes(q))
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 100);
-  }, [entries, q]);
+    if (!hasCriteria) return [];
+    let list = entries;
+    if (q) list = list.filter((e) => e.text && e.text.toLowerCase().includes(q));
+    if (typeFilter.length) list = list.filter((e) => typeFilter.includes(e.type));
+    if (priorityOnly) list = list.filter((e) => e.priority);
+    return list.sort((a, b) => b.createdAt - a.createdAt).slice(0, 100);
+  }, [entries, q, typeFilter, priorityOnly, hasCriteria]);
 
   const highlight = (text) => {
+    if (!q) return text;
     const idx = text.toLowerCase().indexOf(q);
     if (idx === -1) return text;
     return (
@@ -1942,27 +1952,53 @@ function SearchOverlay({ entries, collections, onClose, onSelect }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-paper flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: SAFE_BOTTOM }}>
-      <div className="shrink-0 flex items-center gap-2 px-5 pt-4 pb-3 border-b border-rule">
-        <div className="flex-1 min-w-0 flex items-center gap-2 bg-paper-card rounded-2xl border border-rule px-3" style={{ minHeight: 44 }}>
-          <Search size={16} className="text-ink-faint shrink-0" />
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your bullets…"
-            className="flex-1 min-w-0 bg-transparent outline-none py-2.5 text-[15px] appearance-none"
-            style={{ color: "var(--ink)", WebkitAppearance: "none" }}
-            enterKeyHint="search"
-          />
+      <div className="shrink-0 px-5 pt-4 pb-3 border-b border-rule">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 flex items-center gap-2 bg-paper-card rounded-2xl border border-rule px-3" style={{ minHeight: 44 }}>
+            <Search size={16} className="text-ink-faint shrink-0" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search your bullets…"
+              className="flex-1 min-w-0 bg-transparent outline-none py-2.5 text-[15px] appearance-none"
+              style={{ color: "var(--ink)", WebkitAppearance: "none" }}
+              enterKeyHint="search"
+            />
+          </div>
+          <button onClick={onClose} className="p-2 shrink-0" style={{ minWidth: 44, minHeight: 44 }}><X size={20} /></button>
         </div>
-        <button onClick={onClose} className="p-2 shrink-0" style={{ minWidth: 44, minHeight: 44 }}><X size={20} /></button>
+
+        <div className="flex items-center gap-1.5 mt-3 overflow-x-auto">
+          {TYPE_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => toggleType(opt.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border shrink-0 flex items-center gap-1.5 ${
+                typeFilter.includes(opt.key) ? "bg-ink text-paper border-ink" : "bg-transparent text-ink-faint border-rule"
+              }`}
+              style={{ minHeight: 30 }}
+            >
+              <span className="font-mono">{opt.glyph}</span>{opt.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setPriorityOnly((p) => !p)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border shrink-0 flex items-center gap-1 ${
+              priorityOnly ? "bg-accent-priority text-white border-accent-priority" : "bg-transparent text-ink-faint border-rule"
+            }`}
+            style={{ minHeight: 30 }}
+          >
+            <Star size={12} fill={priorityOnly ? "white" : "none"} /> Priority
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-3">
-        {!q ? (
-          <p className="py-10 text-center text-sm text-ink-faint">Type to search across every bullet you've logged — daily, monthly, future, and collections.</p>
+        {!hasCriteria ? (
+          <p className="py-10 text-center text-sm text-ink-faint">Type a keyword, or filter by type/priority, to search across every bullet you've logged — daily, monthly, future, and collections.</p>
         ) : results.length === 0 ? (
-          <p className="py-10 text-center text-sm text-ink-faint">No bullets match "{query.trim()}".</p>
+          <p className="py-10 text-center text-sm text-ink-faint">No bullets match {q ? `"${query.trim()}"` : "these filters"}.</p>
         ) : (
           <div className="rounded-2xl bg-paper-card border border-rule px-4 pt-1 overflow-hidden">
             {results.map((entry) => (
@@ -2067,8 +2103,8 @@ function EditSheet({ entry, onClose, onSave, onDelete, onComplete, onReopen, onM
   const save = () => {
     if (!text.trim()) return;
     const patch = { text: text.trim(), type, priority };
-    if (type !== "task") patch.status = undefined;
-    else if (entry.type !== "task") patch.status = "open";
+    if (type === "task" && entry.type !== "task") patch.status = "open";
+    else if (type !== "task" && entry.status && entry.status !== "irrelevant") patch.status = undefined;
     onSave(patch);
   };
 
@@ -2117,6 +2153,12 @@ function EditSheet({ entry, onClose, onSave, onDelete, onComplete, onReopen, onM
           ) : (
             <MiniButton icon={RotateCcw} label="Reopen" onClick={onReopen} />
           )}
+        </div>
+      )}
+
+      {!simple && type !== "task" && !isMuted && (
+        <div className="flex items-center gap-2 mb-2">
+          <MiniButton icon={Minus} label="Mark irrelevant" onClick={onIrrelevant} />
         </div>
       )}
 
